@@ -1,18 +1,9 @@
 import { randomBytes, createHash } from "node:crypto"
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
+import type { Scope } from "@/lib/api-key-scopes"
 
-export const SCOPES = [
-  "read:processes",
-  "write:processes",
-  "read:bitacora",
-  "write:bitacora",
-  "read:historial",
-  "write:historial",
-  "execute:flows",
-] as const
-
-export type Scope = (typeof SCOPES)[number]
+export { SCOPES, type Scope } from "@/lib/api-key-scopes"
 
 const PREFIX = "dia"
 

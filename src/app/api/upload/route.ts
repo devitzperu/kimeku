@@ -46,12 +46,12 @@ export async function POST(req: NextRequest) {
   }
 
   const yyyymm = new Date().toISOString().slice(0, 7)
-  const subdir = path.join(UPLOAD_DIR, yyyymm)
+  const subdir = path.join(/* turbopackIgnore: true */ UPLOAD_DIR, yyyymm)
   await mkdir(subdir, { recursive: true })
 
   const safeName = file.name.replace(/[^\w.\-]/g, "_").slice(0, 100)
   const filename = `${Date.now()}-${randomUUID().slice(0, 8)}-${safeName}`
-  const filepath = path.join(subdir, filename)
+  const filepath = path.join(/* turbopackIgnore: true */ subdir, filename)
 
   const buffer = Buffer.from(await file.arrayBuffer())
   await writeFile(filepath, buffer)

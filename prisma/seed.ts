@@ -3,53 +3,82 @@ import bcrypt from "bcryptjs"
 
 const prisma = new PrismaClient()
 
+function requireEnv(name: string): string {
+  const value = process.env[name]
+  if (!value || !value.trim()) {
+    throw new Error(`Missing ${name} env. Set it in .env before seeding.`)
+  }
+  return value.trim()
+}
+
+function optionalEnv(name: string, fallback: string): string {
+  return (process.env[name] ?? "").trim() || fallback
+}
+
 async function main() {
   console.log("Seeding…")
+
+  const adminEmail = requireEnv("SEED_ADMIN_EMAIL")
+  const adminPassword = requireEnv("SEED_ADMIN_PASSWORD")
+  const adminName = optionalEnv("SEED_ADMIN_NAME", "Admin")
+  if (adminPassword.length < 8) {
+    throw new Error("SEED_ADMIN_PASSWORD must be at least 8 characters.")
+  }
 
   // Default admin (only if no users exist)
   const userCount = await prisma.user.count()
   if (userCount === 0) {
-    const password = await bcrypt.hash("admin1234", 10)
+    const password = await bcrypt.hash(adminPassword, 10)
     await prisma.user.create({
       data: {
-        name: "Admin",
-        email: "admin@doc-ia.local",
+        name: adminName,
+        email: adminEmail,
         password,
         role: "ADMIN",
       },
     })
-    console.log("✓ Admin user created — admin@doc-ia.local / admin1234")
+    console.log(`✓ Admin user created — ${adminEmail}`)
   } else {
     console.log("✓ Users exist — skipped admin creation")
   }
 
-  // Demo client + portal user
-  const demoClient = await prisma.client.upsert({
-    where: { id: "demo-client" },
-    update: {},
-    create: {
-      id: "demo-client",
-      name: "Cliente Demo",
-      description: "Cliente de ejemplo para validar el portal externo.",
-    },
-  })
-  const existingClientUser = await prisma.user.findUnique({
-    where: { email: "cliente@demo.local" },
-  })
-  if (!existingClientUser) {
-    const clientPass = await bcrypt.hash("cliente1234", 10)
-    await prisma.user.create({
-      data: {
-        name: "Cliente Demo",
-        email: "cliente@demo.local",
-        password: clientPass,
-        role: "CLIENT",
-        clientId: demoClient.id,
+  // Optional demo client + portal user. Skipped if env vars missing.
+  const demoClientEmail = (process.env.SEED_DEMO_CLIENT_EMAIL ?? "").trim()
+  const demoClientPassword = (process.env.SEED_DEMO_CLIENT_PASSWORD ?? "").trim()
+  if (demoClientEmail && demoClientPassword) {
+    if (demoClientPassword.length < 8) {
+      throw new Error("SEED_DEMO_CLIENT_PASSWORD must be at least 8 characters.")
+    }
+    const demoClientName = optionalEnv("SEED_DEMO_CLIENT_NAME", "Cliente Demo")
+    const demoClient = await prisma.client.upsert({
+      where: { id: "demo-client" },
+      update: {},
+      create: {
+        id: "demo-client",
+        name: demoClientName,
+        description: "Cliente de ejemplo para validar el portal externo.",
       },
     })
-    console.log("✓ Client portal user created — cliente@demo.local / cliente1234")
+    const existingClientUser = await prisma.user.findUnique({
+      where: { email: demoClientEmail },
+    })
+    if (!existingClientUser) {
+      const clientPass = await bcrypt.hash(demoClientPassword, 10)
+      await prisma.user.create({
+        data: {
+          name: demoClientName,
+          email: demoClientEmail,
+          password: clientPass,
+          role: "CLIENT",
+          clientId: demoClient.id,
+        },
+      })
+      console.log(`✓ Client portal user created — ${demoClientEmail}`)
+    } else {
+      console.log("✓ Client portal user exists — skipped")
+    }
   } else {
-    console.log("✓ Client portal user exists — skipped")
+    console.log("✓ Demo client seed skipped (SEED_DEMO_CLIENT_EMAIL/PASSWORD unset)")
   }
 
   // Default tags

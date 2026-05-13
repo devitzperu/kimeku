@@ -27,7 +27,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { createApiKey, revokeApiKey, deleteApiKey } from "@/actions/api-keys"
-import { SCOPES } from "@/lib/api-key"
+import { SCOPES } from "@/lib/api-key-scopes"
 import { formatDateTime } from "@/lib/utils"
 
 type Key = {

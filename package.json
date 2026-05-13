@@ -1,8 +1,11 @@
 {
-  "name": "kimeku",
-  "version": "0.1.0",
-  "private": true,
-  "license": "AGPL-3.0-only",
+  "name": "@devitzperu/kimeku",
+  "version": "0.1.0-rc.1",
+  "publishConfig": {
+    "access": "public"
+  },
+  "private": false,
+  "license": "SEE LICENSE IN LICENSE",
   "description": "AI-powered process documentation platform. Document, version, and automate your organization's operational memory.",
   "author": "devitzperu",
   "repository": {
@@ -13,9 +16,23 @@
   "bugs": {
     "url": "https://github.com/devitzperu/kimeku/issues"
   },
+  "bin": {
+    "kimeku": "./bin/kimeku.js"
+  },
+  "files": [
+    "bin/",
+    "prisma/schema.prisma",
+    "prisma/seed.ts",
+    ".next/standalone/",
+    ".next/static/",
+    "public/",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build --turbopack",
+    "build:dist": "next build --turbopack && node scripts/copy-standalone.mjs",
     "start": "next start",
     "lint": "eslint",
     "db:generate": "node scripts/with-db.mjs prisma generate",
@@ -25,7 +42,8 @@
     "db:seed": "node scripts/with-db.mjs tsx prisma/seed.ts",
     "db:reset": "node scripts/with-db.mjs prisma migrate reset",
     "db:search-init": "node scripts/with-db.mjs node scripts/enable-search.mjs",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "prepublishOnly": "node scripts/copy-standalone.mjs"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -73,6 +91,8 @@
     "next": "16.2.4",
     "next-auth": "5.0.0-beta.31",
     "next-themes": "^0.4.6",
+    "pg": "^8.13.0",
+    "prisma": "^6.19.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-organizational-chart": "^2.2.1",
@@ -94,7 +114,6 @@
     "dotenv-cli": "^11.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
-    "prisma": "^6.19.3",
     "sharp": "^0.34.5",
     "tailwindcss": "^4",
     "tsx": "^4.21.0",

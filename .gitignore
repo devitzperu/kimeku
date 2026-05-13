@@ -51,3 +51,25 @@ next-env.d.ts
 .claude
 CLAUDE.md
 CLAUDE.local.md
+
+# secrets / credenciales accidentales
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+.vapid-keys.json
+credentials.json
+serviceaccount*.json
+
+# dumps DB
+*.sql
+*.dump
+*.bak
+
+# datos locales
+data/
+backups/
+*.sqlite
+*.sqlite3
+*.db
