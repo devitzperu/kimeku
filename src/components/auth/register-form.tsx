@@ -1,14 +1,16 @@
 "use client"
 
-import { useActionState } from "react"
+import { useActionState, useState } from "react"
 import { Loader2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
+import { PasswordInput } from "@/components/shared/password-input"
 import { registerAction } from "@/actions/auth"
 
 export function RegisterForm() {
   const [state, action, pending] = useActionState(registerAction, null)
+  const [password, setPassword] = useState("")
 
   return (
     <form action={action} className="space-y-4">
@@ -22,14 +24,15 @@ export function RegisterForm() {
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="password">Contraseña</Label>
-        <Input
+        <PasswordInput
           id="password"
           name="password"
-          type="password"
+          value={password}
+          onChange={setPassword}
           required
+          minLength={8}
           autoComplete="new-password"
           placeholder="Mínimo 8 caracteres"
-          minLength={8}
         />
       </div>
 

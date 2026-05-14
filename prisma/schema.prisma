@@ -54,6 +54,15 @@ enum TodoStatus {
   CANCELLED
 }
 
+enum TodoEventType {
+  CREATED
+  STARTED
+  PAUSED
+  COMPLETED
+  REOPENED
+  CANCELLED
+}
+
 enum GitProviderKind {
   GITHUB
   GITLAB
@@ -78,6 +87,7 @@ model User {
   accounts              Account[]
   sessions              Session[]
   todos                 Todo[]                 @relation("TodoOwner")
+  todoEvents            TodoEvent[]            @relation("TodoEventActor")
   pushSubscriptions     PushSubscription[]
   repoBindings          RepoBinding[]
   areaMemberships       AreaMember[]
@@ -450,18 +460,34 @@ model Todo {
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 
-  owner       User      @relation("TodoOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  process     Process?  @relation(fields: [processId], references: [id], onDelete: SetNull)
-  parentTodo  Todo?     @relation("TodoSeries", fields: [parentTodoId], references: [id], onDelete: Cascade)
-  occurrences Todo[]    @relation("TodoSeries")
+  owner       User        @relation("TodoOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  process     Process?    @relation(fields: [processId], references: [id], onDelete: SetNull)
+  parentTodo  Todo?       @relation("TodoSeries", fields: [parentTodoId], references: [id], onDelete: Cascade)
+  occurrences Todo[]      @relation("TodoSeries")
   tags        TodoTag[]
-  client      Client?   @relation("ClientTodos", fields: [clientId], references: [id], onDelete: SetNull)
+  client      Client?     @relation("ClientTodos", fields: [clientId], references: [id], onDelete: SetNull)
+  events      TodoEvent[]
 
   @@index([ownerId, status, dueAt])
   @@index([alarmAt, alarmSentAt])
   @@index([processId])
   @@index([parentTodoId])
   @@index([clientId, visibleToClient, status, dueAt])
+}
+
+model TodoEvent {
+  id        String        @id @default(cuid())
+  todoId    String
+  type      TodoEventType
+  actorId   String
+  reason    String?       @db.Text
+  createdAt DateTime      @default(now())
+
+  todo  Todo @relation(fields: [todoId], references: [id], onDelete: Cascade)
+  actor User @relation("TodoEventActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([todoId, createdAt])
+  @@index([actorId])
 }
 
 model TodoTag {

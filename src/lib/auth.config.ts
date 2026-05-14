@@ -27,7 +27,7 @@ export const authConfig = {
         return true
       }
 
-      if (path.startsWith("/docs") || path.startsWith("/api/openapi.json")) return true
+      if (path.startsWith("/api/openapi.json")) return true
       if (path.startsWith("/api/v1/webhooks/")) return true
       if (path.startsWith("/api/integrations/webhooks/")) return true
       if (path.startsWith("/api/v1/")) return true
@@ -40,6 +40,8 @@ export const authConfig = {
         if (isPortal || isPortalApi) return true
         return Response.redirect(new URL("/portal", nextUrl))
       }
+
+      if (path.startsWith("/docs")) return true
 
       if (isPortal || isPortalApi) {
         return Response.redirect(new URL("/", nextUrl))

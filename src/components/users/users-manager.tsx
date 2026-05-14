@@ -1,14 +1,13 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
-import { Plus, Pencil, Trash2, Loader2, ShieldCheck, ShieldAlert, Eye, EyeOff, Sparkles, Copy, Check } from "lucide-react"
+import { useState, useTransition } from "react"
+import { Plus, Pencil, Trash2, Loader2, ShieldCheck, ShieldAlert, Eye } from "lucide-react"
 import { toast } from "sonner"
-import { suggestPassword } from "@/lib/password-suggest"
-import { cn } from "@/lib/utils"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { PasswordInput } from "@/components/shared/password-input"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -152,27 +151,6 @@ function UserDialog({
   const [email, setEmail] = useState(user?.email ?? "")
   const [password, setPassword] = useState("")
   const [role, setRole] = useState<User["role"]>(user?.role ?? "VIEWER")
-  const [showPassword, setShowPassword] = useState(false)
-  const [copied, setCopied] = useState(false)
-
-  const strength = useMemo(() => scorePassword(password), [password])
-
-  function handleSuggest() {
-    const pwd = suggestPassword()
-    setPassword(pwd)
-    setShowPassword(true)
-  }
-
-  async function handleCopy() {
-    if (!password) return
-    try {
-      await navigator.clipboard.writeText(password)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1600)
-    } catch {
-      toast.error("No se pudo copiar")
-    }
-  }
 
   function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
@@ -188,7 +166,6 @@ function UserDialog({
         setEmail("")
         setPassword("")
         setRole("VIEWER")
-        setShowPassword(false)
         onClose()
       }
     })
@@ -211,50 +188,18 @@ function UserDialog({
               <Input id="user-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
             </div>
             <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="user-password">{user ? "Contraseña (dejar vacío para no cambiar)" : "Contraseña"}</Label>
-                <button
-                  type="button"
-                  onClick={handleSuggest}
-                  className="inline-flex items-center gap-1 text-xs text-accent hover:text-accent-hover transition-colors"
-                >
-                  <Sparkles className="h-3 w-3" />
-                  Sugerir
-                </button>
-              </div>
-              <div className="relative">
-                <Input
-                  id="user-password"
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required={!user}
-                  minLength={user ? undefined : 8}
-                  placeholder={user ? "Sin cambios" : "Mínimo 8 caracteres"}
-                  className="pr-20 font-mono"
-                />
-                <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-                  {password && (
-                    <button
-                      type="button"
-                      onClick={handleCopy}
-                      title="Copiar"
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-fg-subtle hover:text-fg hover:bg-bg-muted transition-colors"
-                    >
-                      {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword((v) => !v)}
-                    title={showPassword ? "Ocultar" : "Mostrar"}
-                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-fg-subtle hover:text-fg hover:bg-bg-muted transition-colors"
-                  >
-                    {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                  </button>
-                </div>
-              </div>
-              {password && <StrengthMeter level={strength.level} label={strength.label} />}
+              <Label htmlFor="user-password">
+                {user ? "Contraseña (dejar vacío para no cambiar)" : "Contraseña"}
+              </Label>
+              <PasswordInput
+                id="user-password"
+                value={password}
+                onChange={setPassword}
+                required={!user}
+                minLength={user ? undefined : 8}
+                placeholder={user ? "Sin cambios" : "Mínimo 8 caracteres"}
+                autoComplete="new-password"
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Rol</Label>
@@ -280,47 +225,6 @@ function UserDialog({
         </form>
       </DialogContent>
     </Dialog>
-  )
-}
-
-type Strength = { level: 0 | 1 | 2 | 3 | 4; label: string }
-
-function scorePassword(pwd: string): Strength {
-  if (!pwd) return { level: 0, label: "" }
-  let score = 0
-  if (pwd.length >= 8) score++
-  if (pwd.length >= 12) score++
-  if (/[a-z]/.test(pwd) && /[A-Z]/.test(pwd)) score++
-  if (/\d/.test(pwd)) score++
-  if (/[^a-zA-Z0-9]/.test(pwd)) score++
-  const level = Math.min(4, score) as Strength["level"]
-  const labels = ["Muy débil", "Débil", "Aceptable", "Buena", "Fuerte"]
-  return { level, label: labels[level] }
-}
-
-function StrengthMeter({ level, label }: Strength) {
-  const colors = [
-    "bg-danger",
-    "bg-danger",
-    "bg-warning",
-    "bg-info",
-    "bg-success",
-  ]
-  return (
-    <div className="space-y-1">
-      <div className="flex gap-1">
-        {[0, 1, 2, 3].map((i) => (
-          <div
-            key={i}
-            className={cn(
-              "h-1 flex-1 rounded-full transition-colors duration-300",
-              i < level ? colors[level] : "bg-bg-muted"
-            )}
-          />
-        ))}
-      </div>
-      <p className="text-[11px] text-fg-subtle">{label}</p>
-    </div>
   )
 }
 

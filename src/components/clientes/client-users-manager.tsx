@@ -1,13 +1,14 @@
 "use client"
 
 import * as React from "react"
-import { Plus, Trash2, Loader2, UserRound, Copy, Check, RefreshCcw } from "lucide-react"
+import { Plus, Trash2, Loader2, UserRound, Copy, Check } from "lucide-react"
 import { toast } from "sonner"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
+import { PasswordInput } from "@/components/shared/password-input"
 import {
   Dialog,
   DialogContent,
@@ -159,25 +160,15 @@ function CreateDialog({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="cu-password">Contraseña inicial</Label>
-            <div className="flex gap-2">
-              <Input
-                id="cu-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={8}
-                className="font-mono text-xs"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                aria-label="Generar contraseña"
-                onClick={() => setPassword(suggestPassword())}
-              >
-                <RefreshCcw className="h-4 w-4" />
-              </Button>
-            </div>
+            <PasswordInput
+              id="cu-password"
+              value={password}
+              onChange={setPassword}
+              required
+              minLength={8}
+              autoComplete="new-password"
+              suggestLabel="Regenerar"
+            />
             <p className="font-mono text-[10px] uppercase tracking-wider text-fg-subtle">
               Mínimo 8 caracteres. Se mostrará una sola vez.
             </p>

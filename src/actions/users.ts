@@ -3,8 +3,8 @@
 import { revalidatePath } from "next/cache"
 import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
-import { requireRole } from "@/lib/auth-helpers"
-import { createUserSchema, updateUserSchema } from "@/lib/validations/user"
+import { requireAuth, requireRole } from "@/lib/auth-helpers"
+import { changePasswordSchema, createUserSchema, updateUserSchema } from "@/lib/validations/user"
 
 export type ActionResult = { ok: true } | { ok: false; error: string }
 
@@ -62,5 +62,21 @@ export async function deleteUser(id: string): Promise<ActionResult> {
   if (me.id === id) return { ok: false, error: "No puedes eliminar tu propia cuenta" }
   await prisma.user.delete({ where: { id } })
   revalidatePath("/configuracion/usuarios")
+  return { ok: true }
+}
+
+export async function changePassword(input: { current: string; next: string }): Promise<ActionResult> {
+  const me = await requireAuth()
+  const parsed = changePasswordSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Inválido" }
+  const user = await prisma.user.findUnique({ where: { id: me.id }, select: { password: true } })
+  if (!user?.password) return { ok: false, error: "No hay contraseña configurada" }
+  const ok = await bcrypt.compare(parsed.data.current, user.password)
+  if (!ok) return { ok: false, error: "Contraseña actual incorrecta" }
+  if (parsed.data.current === parsed.data.next) {
+    return { ok: false, error: "La nueva contraseña debe ser distinta" }
+  }
+  const hashed = await bcrypt.hash(parsed.data.next, 10)
+  await prisma.user.update({ where: { id: me.id }, data: { password: hashed } })
   return { ok: true }
 }

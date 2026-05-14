@@ -1,0 +1,102 @@
+/* Milkdown Crepe theme overrides — bind to project tokens (Tailwind v4 + shadcn) */
+.kimeku-md-editor {
+  --crepe-color-background: var(--background, hsl(0 0% 100%));
+  --crepe-color-surface: var(--background, hsl(0 0% 100%));
+  --crepe-color-on-surface: var(--foreground, hsl(222 47% 11%));
+  --crepe-color-on-surface-variant: var(--muted-foreground, hsl(215 16% 47%));
+  --crepe-color-outline: var(--border, hsl(214 32% 91%));
+  --crepe-color-primary: var(--primary, hsl(221 83% 53%));
+  --crepe-color-secondary: var(--secondary, hsl(210 40% 96%));
+  --crepe-color-on-primary: var(--primary-foreground, hsl(0 0% 100%));
+  --crepe-color-on-secondary: var(--secondary-foreground, hsl(222 47% 11%));
+  --crepe-color-inverse: var(--foreground, hsl(222 47% 11%));
+  --crepe-color-on-inverse: var(--background, hsl(0 0% 100%));
+  --crepe-color-inline-area: color-mix(in srgb, var(--muted, hsl(210 40% 96%)) 70%, transparent);
+  --crepe-color-inline-code: var(--accent, hsl(210 40% 96%));
+  --crepe-color-error: var(--destructive, hsl(0 84% 60%));
+  --crepe-color-hover: color-mix(in srgb, var(--accent, hsl(210 40% 96%)) 60%, transparent);
+  --crepe-color-selected: color-mix(in srgb, var(--primary, hsl(221 83% 53%)) 18%, transparent);
+  --crepe-color-shadow: 0 0% 0%;
+  --crepe-shadow-1: 0 1px 2px hsl(var(--crepe-color-shadow) / 0.08);
+  --crepe-shadow-2: 0 4px 12px hsl(var(--crepe-color-shadow) / 0.12);
+  --crepe-font-title: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  --crepe-font-default: var(--font-sans, ui-sans-serif, system-ui, sans-serif);
+  --crepe-font-code: var(--font-mono, ui-monospace, monospace);
+}
+
+.kimeku-md-editor .milkdown {
+  background: transparent;
+  color: inherit;
+}
+
+.kimeku-md-editor .milkdown .editor {
+  /* padding-left más amplio para alojar el block handle (drag + slash) de Crepe */
+  padding: 0.875rem 1rem 0.875rem 2.25rem;
+  min-height: inherit;
+  outline: none;
+}
+
+.kimeku-md-editor .milkdown .ProseMirror {
+  outline: none;
+  min-height: inherit;
+}
+
+.kimeku-md-editor .milkdown :is(h1, h2, h3, h4, h5, h6) {
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.kimeku-md-editor .milkdown p {
+  line-height: 1.6;
+}
+
+.kimeku-md-editor .milkdown pre,
+.kimeku-md-editor .milkdown code {
+  font-family: var(--crepe-font-code);
+}
+
+.kimeku-md-editor .milkdown code {
+  padding: 0.1rem 0.3rem;
+  border-radius: 0.25rem;
+  background: var(--crepe-color-inline-code);
+  font-size: 0.875em;
+}
+
+.kimeku-md-editor .milkdown blockquote {
+  border-left: 3px solid var(--crepe-color-primary);
+  padding-left: 0.75rem;
+  color: var(--crepe-color-on-surface-variant);
+}
+
+.kimeku-md-editor .milkdown a {
+  color: var(--crepe-color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.kimeku-md-editor .milkdown table {
+  border-collapse: collapse;
+}
+
+.kimeku-md-editor .milkdown :is(th, td) {
+  border: 1px solid var(--crepe-color-outline);
+  padding: 0.4rem 0.6rem;
+}
+
+/* Slash menu, toolbar y tooltips quedan en body — heredan colores Crepe */
+milkdown-block-handle,
+milkdown-slash-menu,
+milkdown-toolbar,
+milkdown-link-edit,
+milkdown-link-preview,
+milkdown-image-block,
+milkdown-image-inline,
+milkdown-table-block {
+  --crepe-color-background: var(--background, hsl(0 0% 100%));
+  --crepe-color-surface: var(--popover, var(--background, hsl(0 0% 100%)));
+  --crepe-color-on-surface: var(--popover-foreground, var(--foreground, hsl(222 47% 11%)));
+  --crepe-color-on-surface-variant: var(--muted-foreground, hsl(215 16% 47%));
+  --crepe-color-outline: var(--border, hsl(214 32% 91%));
+  --crepe-color-primary: var(--primary, hsl(221 83% 53%));
+  --crepe-color-hover: color-mix(in srgb, var(--accent, hsl(210 40% 96%)) 70%, transparent);
+}

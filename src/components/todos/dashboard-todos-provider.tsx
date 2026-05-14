@@ -10,6 +10,8 @@ import { listOwnTodos, completeTodo, startTodo, pauseTodo } from "@/actions/todo
 import { formatDateTime } from "@/lib/utils"
 import { usePomodoro, PomodoroPanel, type PomodoroState } from "@/components/todos/pomodoro-widget"
 import type { TodoItemView } from "@/components/todos/todo-item"
+import { TransitionReasonDialog } from "@/components/todos/transition-reason-dialog"
+import { TRANSITION_META, type TransitionAction } from "@/components/todos/transition-meta"
 
 declare global {
   interface Window {
@@ -138,6 +140,10 @@ function PipDiarioView({ pipWin, pomodoro }: PipDiarioViewProps) {
   const [todos, setTodos] = React.useState<TodoItemView[]>([])
   const [pendingId, setPendingId] = React.useState<string | null>(null)
   const [errors, setErrors] = React.useState<Map<string, string>>(new Map())
+  const [pendingTransition, setPendingTransition] = React.useState<{
+    todo: TodoItemView
+    action: TransitionAction
+  } | null>(null)
 
   const fetchTodos = React.useCallback(async () => {
     const res = await listOwnTodos()
@@ -211,15 +217,27 @@ function PipDiarioView({ pipWin, pomodoro }: PipDiarioViewProps) {
   }
 
   function onPlay(t: TodoItemView) {
-    run(itemKey(t), () => startTodo(t.id))
+    setPendingTransition({ todo: t, action: "start" })
   }
   function onPause(t: TodoItemView) {
-    run(itemKey(t), () => pauseTodo(t.id))
+    setPendingTransition({ todo: t, action: "pause" })
   }
   function onStop(t: TodoItemView) {
-    run(itemKey(t), () =>
-      completeTodo(t.id, t.isOccurrence ? t.occurrenceDate ?? undefined : undefined)
-    )
+    setPendingTransition({ todo: t, action: "complete" })
+  }
+
+  function executePipTransition(reason: string | null) {
+    if (!pendingTransition) return
+    const { todo: t, action } = pendingTransition
+    const occ = t.isOccurrence ? t.occurrenceDate ?? undefined : undefined
+    const fn =
+      action === "start"
+        ? () => startTodo(t.id, reason)
+        : action === "pause"
+        ? () => pauseTodo(t.id, reason)
+        : () => completeTodo(t.id, occ, reason)
+    setPendingTransition(null)
+    run(itemKey(t), fn)
   }
 
   return (
@@ -344,6 +362,21 @@ function PipDiarioView({ pipWin, pomodoro }: PipDiarioViewProps) {
           })
         )}
       </div>
+
+      <TransitionReasonDialog
+        open={!!pendingTransition}
+        title={pendingTransition ? TRANSITION_META[pendingTransition.action].title : ""}
+        description={
+          pendingTransition ? TRANSITION_META[pendingTransition.action].description : undefined
+        }
+        confirmLabel={
+          pendingTransition ? TRANSITION_META[pendingTransition.action].confirmLabel : ""
+        }
+        pending={pendingId !== null}
+        onCancel={() => setPendingTransition(null)}
+        onConfirm={executePipTransition}
+        container={pipWin.document.body}
+      />
     </div>
   )
 }

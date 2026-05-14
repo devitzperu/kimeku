@@ -120,9 +120,9 @@ export function GlobalSearch() {
                 Crear proceso
                 <CommandShortcut>⌘N</CommandShortcut>
               </CommandItem>
-              <CommandItem onSelect={() => goNew("/todos/new")}>
+              <CommandItem onSelect={() => goNew("/todos")}>
                 <ListTodo className="text-fg-subtle" />
-                Nuevo TODO
+                Ir a actividades
                 <CommandShortcut>⌘T</CommandShortcut>
               </CommandItem>
               <CommandItem onSelect={() => goNew("/bitacora/new")}>

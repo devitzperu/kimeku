@@ -24,10 +24,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { MarkdownEditor } from "@/components/shared/markdown-editor"
-import { MultiSelect } from "@/components/shared/multi-select"
+import { CreatableMultiSelect } from "@/components/shared/creatable-multi-select"
+import { createTag } from "@/actions/tags"
 import { RecurrencePicker } from "@/components/todos/recurrence-picker"
 import { StartHistorialButton } from "@/components/todos/start-historial-button"
+import { TodoTimeline } from "@/components/todos/todo-timeline"
+import { TransitionReasonDialog } from "@/components/todos/transition-reason-dialog"
 import {
   patchTodo,
   completeTodo,
@@ -93,6 +97,8 @@ export function TodoDrawer({ initial, processes, tags, clients, readOnly }: Todo
   const [rruleUntil, setRruleUntil] = React.useState<Date | null>(initial.rruleUntil)
   const [processId, setProcessId] = React.useState<string | null>(initial.processId)
   const [tagIds, setTagIds] = React.useState<string[]>(initial.tagIds)
+  const [tagOptions, setTagOptions] = React.useState(tags)
+  React.useEffect(() => setTagOptions(tags), [tags])
   const [status, setStatus] = React.useState<TodoStatus>(initial.status)
   const [visibleToClient, setVisibleToClient] = React.useState<boolean>(initial.visibleToClient)
   const [clientId, setClientId] = React.useState<string | null>(initial.clientId)
@@ -111,6 +117,8 @@ export function TodoDrawer({ initial, processes, tags, clients, readOnly }: Todo
 
   const [pending, start] = React.useTransition()
   const [actionPending, startAction] = React.useTransition()
+  const [transitionOpen, setTransitionOpen] = React.useState(false)
+  const [timelineKey, setTimelineKey] = React.useState(0)
 
   const savePatch = React.useCallback(
     (patch: TodoPatchInput) => {
@@ -201,15 +209,23 @@ export function TodoDrawer({ initial, processes, tags, clients, readOnly }: Todo
 
   function onToggleStatus() {
     if (readOnly) return
+    setTransitionOpen(true)
+  }
+
+  function confirmTransition(reason: string | null) {
     startAction(async () => {
       const next: TodoStatus = status === "COMPLETED" ? "PENDING" : "COMPLETED"
       const res =
-        status === "COMPLETED" ? await reopenTodo(initial.id) : await completeTodo(initial.id)
+        status === "COMPLETED"
+          ? await reopenTodo(initial.id, reason)
+          : await completeTodo(initial.id, undefined, reason)
       if (!res.ok) {
         toast.error(res.error)
         return
       }
       setStatus(next)
+      setTransitionOpen(false)
+      setTimelineKey((k) => k + 1)
       router.refresh()
     })
   }
@@ -301,7 +317,7 @@ export function TodoDrawer({ initial, processes, tags, clients, readOnly }: Todo
           </SheetDescription>
         </SheetHeader>
 
-        <div className="mt-6 space-y-6">
+        <div className="mt-6 space-y-4">
           {!readOnly && (
             <div className="flex flex-wrap gap-2">
               {initial.processId && <StartHistorialButton todoId={initial.id} />}
@@ -325,158 +341,209 @@ export function TodoDrawer({ initial, processes, tags, clients, readOnly }: Todo
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="drawer-dueAt">Fecha límite</Label>
-              <Input
-                id="drawer-dueAt"
-                type="date"
-                value={toDateInput(dueAt)}
-                onChange={(e) => onDueAtChange(e.target.value)}
-                disabled={readOnly}
+          <Tabs defaultValue="main">
+            <TabsList>
+              <TabsTrigger value="main">Principal</TabsTrigger>
+              <TabsTrigger value="notes">Notas</TabsTrigger>
+              <TabsTrigger value="history">Historial</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="main" className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="drawer-dueAt">Fecha límite</Label>
+                  <Input
+                    id="drawer-dueAt"
+                    type="date"
+                    value={toDateInput(dueAt)}
+                    onChange={(e) => onDueAtChange(e.target.value)}
+                    disabled={readOnly}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="drawer-alarmAt">Alarma</Label>
+                  <Input
+                    id="drawer-alarmAt"
+                    type="datetime-local"
+                    value={toLocalInput(alarmAt)}
+                    onChange={(e) => onAlarmAtChange(e.target.value)}
+                    disabled={readOnly}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Prioridad</Label>
+                  <Select
+                    value={String(priority)}
+                    onValueChange={onPriorityChange}
+                    disabled={readOnly}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">Normal</SelectItem>
+                      <SelectItem value="1">Alta</SelectItem>
+                      <SelectItem value="2">Urgente</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label>Proceso vinculado</Label>
+                  <Select
+                    value={processId ?? "_none"}
+                    onValueChange={onProcessChange}
+                    disabled={readOnly}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Sin proceso" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">— Sin proceso</SelectItem>
+                      {processes.map((p) => (
+                        <SelectItem key={p.id} value={p.id}>
+                          {p.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Etiquetas</Label>
+                  <CreatableMultiSelect
+                    options={tagOptions.map((t) => ({ value: t.id, label: t.name, color: t.color }))}
+                    selected={tagIds}
+                    onChange={onTagsChange}
+                    placeholder="Seleccionar etiquetas…"
+                    canCreate={!readOnly}
+                    createLabel={(q) => `Crear etiqueta "${q}"`}
+                    onCreate={async (name) => {
+                      const fd = new FormData()
+                      fd.set("name", name)
+                      const res = await createTag(fd)
+                      if (!res.ok) {
+                        toast.error(res.error)
+                        return null
+                      }
+                      setTagOptions((prev) => [
+                        ...prev,
+                        { id: res.data.id, name: res.data.name, color: res.data.color },
+                      ])
+                      toast.success("Etiqueta creada")
+                      return { value: res.data.id, label: res.data.name, color: res.data.color }
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Recurrencia</Label>
+                <RecurrencePicker
+                  value={rrule}
+                  onChange={onRruleChange}
+                  rruleUntil={rruleUntil}
+                  onRruleUntilChange={onRruleUntilChange}
+                />
+              </div>
+
+              <div className="space-y-3 rounded-md border border-border bg-bg-muted/40 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="space-y-1">
+                    <Label className="flex items-center gap-1.5">
+                      <Eye className="h-3.5 w-3.5" />
+                      Visible para cliente
+                    </Label>
+                    <p className="text-xs text-fg-muted">
+                      Si está activo, el cliente verá esta actividad en su portal.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={visibleToClient}
+                    disabled={readOnly}
+                    onCheckedChange={(c) => {
+                      setVisibleToClient(c)
+                      if (!c) {
+                        setClientId(null)
+                        savePatch({ visibleToClient: false, clientId: null })
+                      } else if (clientId) {
+                        savePatch({ visibleToClient: true, clientId })
+                      }
+                    }}
+                  />
+                </div>
+                {visibleToClient && (
+                  <div className="space-y-1.5">
+                    <Label>Cliente</Label>
+                    <Select
+                      value={clientId ?? ""}
+                      onValueChange={(v) => {
+                        const id = v || null
+                        setClientId(id)
+                        if (id) savePatch({ visibleToClient: true, clientId: id })
+                      }}
+                      disabled={readOnly}
+                    >
+                      <SelectTrigger>
+                        <SelectValue
+                          placeholder={clients.length === 0 ? "Sin clientes registrados" : "Seleccionar cliente"}
+                        />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {clients.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+
+              {alarmAt && (
+                <p className="inline-flex items-center gap-1.5 text-xs text-fg-muted">
+                  <Bell className="h-3.5 w-3.5" />
+                  Alarma activa: {alarmAt.toLocaleString()}
+                </p>
+              )}
+            </TabsContent>
+
+            <TabsContent value="notes" className="space-y-1.5">
+              <Label htmlFor="drawer-description">Notas</Label>
+              <MarkdownEditor
+                value={description}
+                onChange={onDescriptionChange}
+                placeholder="Contexto, links, criterios…"
+                height={420}
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="drawer-alarmAt">Alarma</Label>
-              <Input
-                id="drawer-alarmAt"
-                type="datetime-local"
-                value={toLocalInput(alarmAt)}
-                onChange={(e) => onAlarmAtChange(e.target.value)}
-                disabled={readOnly}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Prioridad</Label>
-              <Select
-                value={String(priority)}
-                onValueChange={onPriorityChange}
-                disabled={readOnly}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="0">Normal</SelectItem>
-                  <SelectItem value="1">Alta</SelectItem>
-                  <SelectItem value="2">Urgente</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+            </TabsContent>
 
-          <div className="space-y-1.5">
-            <Label>Proceso vinculado</Label>
-            <Select
-              value={processId ?? "_none"}
-              onValueChange={onProcessChange}
-              disabled={readOnly}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Sin proceso" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_none">— Sin proceso</SelectItem>
-                {processes.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Etiquetas</Label>
-            <MultiSelect
-              options={tags.map((t) => ({ value: t.id, label: t.name, color: t.color }))}
-              selected={tagIds}
-              onChange={onTagsChange}
-              placeholder="Seleccionar etiquetas…"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="drawer-description">Notas</Label>
-            <MarkdownEditor
-              value={description}
-              onChange={onDescriptionChange}
-              placeholder="Contexto, links, criterios…"
-              height={260}
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Recurrencia</Label>
-            <RecurrencePicker
-              value={rrule}
-              onChange={onRruleChange}
-              rruleUntil={rruleUntil}
-              onRruleUntilChange={onRruleUntilChange}
-            />
-          </div>
-
-          <div className="space-y-3 rounded-md border border-border bg-bg-muted/40 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div className="space-y-1">
-                <Label className="flex items-center gap-1.5">
-                  <Eye className="h-3.5 w-3.5" />
-                  Visible para cliente
-                </Label>
-                <p className="text-xs text-fg-muted">
-                  Si está activo, el cliente verá esta actividad en su portal.
+            <TabsContent value="history" className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="font-mono text-[10px] uppercase tracking-widest text-fg-subtle">
+                  Eventos · más reciente arriba · solo lectura
                 </p>
               </div>
-              <Switch
-                checked={visibleToClient}
-                disabled={readOnly}
-                onCheckedChange={(c) => {
-                  setVisibleToClient(c)
-                  if (!c) {
-                    setClientId(null)
-                    savePatch({ visibleToClient: false, clientId: null })
-                  } else if (clientId) {
-                    savePatch({ visibleToClient: true, clientId })
-                  }
-                }}
-              />
-            </div>
-            {visibleToClient && (
-              <div className="space-y-1.5">
-                <Label>Cliente</Label>
-                <Select
-                  value={clientId ?? ""}
-                  onValueChange={(v) => {
-                    const id = v || null
-                    setClientId(id)
-                    if (id) savePatch({ visibleToClient: true, clientId: id })
-                  }}
-                  disabled={readOnly}
-                >
-                  <SelectTrigger>
-                    <SelectValue
-                      placeholder={clients.length === 0 ? "Sin clientes registrados" : "Seleccionar cliente"}
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clients.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-          </div>
-
-          {alarmAt && (
-            <p className="inline-flex items-center gap-1.5 text-xs text-fg-muted">
-              <Bell className="h-3.5 w-3.5" />
-              Alarma activa: {alarmAt.toLocaleString()}
-            </p>
-          )}
+              <TodoTimeline todoId={initial.id} refreshKey={timelineKey} />
+            </TabsContent>
+          </Tabs>
         </div>
+
+        <TransitionReasonDialog
+          open={transitionOpen}
+          title={completed ? "Reabrir actividad" : "Completar actividad"}
+          description={
+            completed
+              ? "Se registrará un evento REOPENED en el historial."
+              : "Se registrará un evento COMPLETED en el historial."
+          }
+          confirmLabel={completed ? "Reabrir" : "Completar"}
+          pending={actionPending}
+          onCancel={() => setTransitionOpen(false)}
+          onConfirm={confirmTransition}
+        />
       </SheetContent>
     </Sheet>
   )

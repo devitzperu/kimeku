@@ -32,6 +32,8 @@ import {
   listClientsForSelect,
 } from "@/actions/todos"
 import { broadcastTodoChange } from "@/components/todos/dashboard-todos-provider"
+import { TransitionReasonDialog } from "@/components/todos/transition-reason-dialog"
+import { TRANSITION_META, type TransitionAction } from "@/components/todos/transition-meta"
 import { formatDateTime } from "@/lib/utils"
 import { cn } from "@/lib/utils"
 
@@ -63,31 +65,44 @@ interface TodoItemProps {
 export function TodoItem({ todo, readOnly }: TodoItemProps) {
   const router = useRouter()
   const [pending, start] = React.useTransition()
+  const [pendingAction, setPendingAction] = React.useState<TransitionAction | null>(null)
   const completed = todo.status === "COMPLETED"
   const inProgress = todo.status === "IN_PROGRESS"
 
-  function runAction(action: () => Promise<{ ok: boolean; error?: string }>) {
-    start(async () => {
-      const res = await action()
-      if (!res.ok) toast.error(res.error ?? "Error")
-      else broadcastTodoChange()
-      router.refresh()
-    })
-  }
-
   function onPlay() {
-    runAction(() => startTodo(todo.id))
+    setPendingAction("start")
   }
   function onPause() {
-    runAction(() => pauseTodo(todo.id))
+    setPendingAction("pause")
   }
   function onStop() {
-    runAction(() =>
-      completeTodo(todo.id, todo.isOccurrence ? todo.occurrenceDate ?? undefined : undefined)
-    )
+    setPendingAction("complete")
   }
   function onReopen() {
-    runAction(() => reopenTodo(todo.id))
+    setPendingAction("reopen")
+  }
+
+  function executeAction(reason: string | null) {
+    if (!pendingAction) return
+    const occ = todo.isOccurrence ? todo.occurrenceDate ?? undefined : undefined
+    const run =
+      pendingAction === "start"
+        ? () => startTodo(todo.id, reason)
+        : pendingAction === "pause"
+        ? () => pauseTodo(todo.id, reason)
+        : pendingAction === "complete"
+        ? () => completeTodo(todo.id, occ, reason)
+        : () => reopenTodo(todo.id, reason)
+    start(async () => {
+      const res = await run()
+      if (!res.ok) {
+        toast.error(res.error ?? "Error")
+      } else {
+        broadcastTodoChange()
+      }
+      setPendingAction(null)
+      router.refresh()
+    })
   }
 
   function onDelete() {
@@ -251,6 +266,15 @@ export function TodoItem({ todo, readOnly }: TodoItemProps) {
           ))}
         </div>
       </div>
+      <TransitionReasonDialog
+        open={!!pendingAction}
+        title={pendingAction ? TRANSITION_META[pendingAction].title : ""}
+        description={pendingAction ? TRANSITION_META[pendingAction].description : undefined}
+        confirmLabel={pendingAction ? TRANSITION_META[pendingAction].confirmLabel : ""}
+        pending={pending}
+        onCancel={() => setPendingAction(null)}
+        onConfirm={executeAction}
+      />
     </div>
   )
 }

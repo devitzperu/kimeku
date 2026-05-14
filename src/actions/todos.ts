@@ -17,7 +17,7 @@ import {
   type QuickAddInput,
   type TodoPatchInput,
 } from "@/lib/validations/todo"
-import { Prisma, type Todo, type TodoTag, type Tag } from "@prisma/client"
+import { Prisma, TodoEventType, type Todo, type TodoTag, type Tag } from "@prisma/client"
 
 export type ActionResult<T = unknown> = { ok: true; data?: T } | { ok: false; error: string }
 
@@ -49,6 +49,24 @@ async function emitDelete(clientId: string, todoId: string) {
   await notify(clientId, { type: "todo:delete", id: todoId })
 }
 
+async function logTodoEvent(args: {
+  todoId: string
+  type: TodoEventType
+  actorId: string
+  reason?: string | null
+  tx?: Prisma.TransactionClient
+}) {
+  const db = args.tx ?? prisma
+  await db.todoEvent.create({
+    data: {
+      todoId: args.todoId,
+      type: args.type,
+      actorId: args.actorId,
+      reason: args.reason?.trim() ? args.reason.trim() : null,
+    },
+  })
+}
+
 export async function createTodo(input: TodoInput): Promise<ActionResult<{ id: string }>> {
   const user = await requireAuth()
   const parsed = todoSchema.safeParse(input)
@@ -74,6 +92,8 @@ export async function createTodo(input: TodoInput): Promise<ActionResult<{ id: s
       tags: { create: data.tagIds.map((tagId) => ({ tagId })) },
     },
   })
+
+  await logTodoEvent({ todoId: created.id, type: TodoEventType.CREATED, actorId: user.id })
 
   if (visible && clientId) await emitUpsert(clientId, created.id)
 
@@ -105,6 +125,7 @@ export async function quickAddTodo(input: QuickAddInput): Promise<ActionResult<{
       dueAt: parsed.data.dueAt ?? null,
     },
   })
+  await logTodoEvent({ todoId: created.id, type: TodoEventType.CREATED, actorId: user.id })
   revalidatePath("/todos")
 
   await indexDoc({
@@ -284,15 +305,20 @@ export async function deleteTodo(id: string): Promise<ActionResult> {
   return { ok: true }
 }
 
-export async function completeTodo(id: string, occurrenceDate?: Date): Promise<ActionResult> {
+export async function completeTodo(
+  id: string,
+  occurrenceDate?: Date,
+  reason?: string | null
+): Promise<ActionResult> {
   const user = await requireAuth()
   const { error, todo } = await loadOwnedOrThrow(id, user.id)
   if (error || !todo) return { ok: false, error: error ?? "Todo no encontrado" }
 
   const now = new Date()
+  let eventTargetId = id
 
   if (todo.rrule && occurrenceDate) {
-    await prisma.todo.create({
+    const occurrence = await prisma.todo.create({
       data: {
         ownerId: todo.ownerId,
         parentTodoId: todo.id,
@@ -307,12 +333,21 @@ export async function completeTodo(id: string, occurrenceDate?: Date): Promise<A
         clientId: todo.clientId,
       },
     })
+    eventTargetId = occurrence.id
+    await logTodoEvent({ todoId: occurrence.id, type: TodoEventType.CREATED, actorId: user.id })
   } else {
     await prisma.todo.update({
       where: { id },
       data: { status: "COMPLETED", completedAt: now },
     })
   }
+
+  await logTodoEvent({
+    todoId: eventTargetId,
+    type: TodoEventType.COMPLETED,
+    actorId: user.id,
+    reason,
+  })
 
   if (todo.visibleToClient && todo.clientId) {
     await emitUpsert(todo.clientId, id)
@@ -323,7 +358,7 @@ export async function completeTodo(id: string, occurrenceDate?: Date): Promise<A
   return { ok: true }
 }
 
-export async function startTodo(id: string): Promise<ActionResult> {
+export async function startTodo(id: string, reason?: string | null): Promise<ActionResult> {
   const user = await requireAuth()
   const { error, todo } = await loadOwnedOrThrow(id, user.id)
   if (error || !todo) return { ok: false, error: error ?? "Todo no encontrado" }
@@ -334,6 +369,7 @@ export async function startTodo(id: string): Promise<ActionResult> {
     where: { id },
     data: { status: "IN_PROGRESS" },
   })
+  await logTodoEvent({ todoId: id, type: TodoEventType.STARTED, actorId: user.id, reason })
   if (todo.visibleToClient && todo.clientId) {
     await emitUpsert(todo.clientId, id)
   }
@@ -342,13 +378,20 @@ export async function startTodo(id: string): Promise<ActionResult> {
   return { ok: true }
 }
 
-export async function pauseTodo(id: string): Promise<ActionResult> {
+export async function pauseTodo(id: string, reason?: string | null): Promise<ActionResult> {
   const user = await requireAuth()
   const { error, todo } = await loadOwnedOrThrow(id, user.id)
   if (error || !todo) return { ok: false, error: error ?? "Todo no encontrado" }
+  const wasCompleted = todo.status === "COMPLETED"
   await prisma.todo.update({
     where: { id },
     data: { status: "PENDING", completedAt: null },
+  })
+  await logTodoEvent({
+    todoId: id,
+    type: wasCompleted ? TodoEventType.REOPENED : TodoEventType.PAUSED,
+    actorId: user.id,
+    reason,
   })
   if (todo.visibleToClient && todo.clientId) {
     await emitUpsert(todo.clientId, id)
@@ -358,8 +401,41 @@ export async function pauseTodo(id: string): Promise<ActionResult> {
   return { ok: true }
 }
 
-export async function reopenTodo(id: string): Promise<ActionResult> {
-  return pauseTodo(id)
+export async function reopenTodo(id: string, reason?: string | null): Promise<ActionResult> {
+  return pauseTodo(id, reason)
+}
+
+export type TodoEventView = {
+  id: string
+  type: TodoEventType
+  actor: { id: string; name: string }
+  reason: string | null
+  createdAt: Date
+}
+
+export async function listTodoEvents(todoId: string): Promise<ActionResult<TodoEventView[]>> {
+  const user = await requireAuth()
+  const todo = await prisma.todo.findUnique({ where: { id: todoId }, select: { ownerId: true } })
+  if (!todo) return { ok: false, error: "Todo no encontrado" }
+  if (todo.ownerId !== user.id) {
+    const allowed = await isAncestorOf(user.id, todo.ownerId)
+    if (!allowed) return { ok: false, error: "Sin permiso" }
+  }
+  const events = await prisma.todoEvent.findMany({
+    where: { todoId },
+    include: { actor: { select: { id: true, name: true } } },
+    orderBy: { createdAt: "desc" },
+  })
+  return {
+    ok: true,
+    data: events.map((e) => ({
+      id: e.id,
+      type: e.type,
+      actor: e.actor,
+      reason: e.reason,
+      createdAt: e.createdAt,
+    })),
+  }
 }
 
 type ListFilter = {

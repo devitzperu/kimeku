@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 import { auth } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { PortalHeader } from "@/components/portal/portal-header"
+import { DisableContextMenu } from "@/components/shared/disable-context-menu"
 
 export default async function ClientPortalLayout({ children }: { children: React.ReactNode }) {
   const session = await auth()
@@ -17,6 +18,7 @@ export default async function ClientPortalLayout({ children }: { children: React
 
   return (
     <div className="flex min-h-screen flex-col bg-bg">
+      <DisableContextMenu />
       <PortalHeader
         client={client}
         userName={session.user.name ?? "Cliente"}

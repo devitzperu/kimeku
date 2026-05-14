@@ -18,9 +18,11 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import { MarkdownEditor } from "@/components/shared/markdown-editor"
 import { MultiSelect } from "@/components/shared/multi-select"
+import { CreatableMultiSelect } from "@/components/shared/creatable-multi-select"
 import { FileUpload, type UploadedFile } from "@/components/shared/file-upload"
 import { CodeBlockEditor, type CodeBlock } from "@/components/processes/code-block-editor"
 import { createProcess, updateProcess } from "@/actions/processes"
+import { createTag } from "@/actions/tags"
 import { bindProcessToRepo, unbindProcess } from "@/actions/repo-binding"
 import { listMyRepos, listMyBranches } from "@/actions/integrations"
 import type { ProcessInput } from "@/lib/validations/process"
@@ -77,6 +79,8 @@ export function ProcessForm({
   const [areaIds, setAreaIds] = React.useState<string[]>(initial?.areaIds ?? [])
   const [clientIds, setClientIds] = React.useState<string[]>(initial?.clientIds ?? [])
   const [tagIds, setTagIds] = React.useState<string[]>(initial?.tagIds ?? [])
+  const [tagOptions, setTagOptions] = React.useState<Option[]>(tags)
+  React.useEffect(() => setTagOptions(tags), [tags])
   const [codeBlocks, setCodeBlocks] = React.useState<CodeBlock[]>(initial?.codeBlocks ?? [])
   const [attachments, setAttachments] = React.useState<UploadedFile[]>(initial?.attachments ?? [])
   const [commitMessage, setCommitMessage] = React.useState("")
@@ -448,11 +452,28 @@ export function ProcessForm({
           </div>
           <div className="space-y-1.5">
             <Label>Etiquetas</Label>
-            <MultiSelect
-              options={tags.map((t) => ({ value: t.id, label: t.name, color: t.color }))}
+            <CreatableMultiSelect
+              options={tagOptions.map((t) => ({ value: t.id, label: t.name, color: t.color }))}
               selected={tagIds}
               onChange={setTagIds}
               placeholder="Seleccionar etiquetas…"
+              canCreate
+              createLabel={(q) => `Crear etiqueta "${q}"`}
+              onCreate={async (name) => {
+                const fd = new FormData()
+                fd.set("name", name)
+                const res = await createTag(fd)
+                if (!res.ok) {
+                  toast.error(res.error)
+                  return null
+                }
+                setTagOptions((prev) => [
+                  ...prev,
+                  { id: res.data.id, name: res.data.name, color: res.data.color },
+                ])
+                toast.success("Etiqueta creada")
+                return { value: res.data.id, label: res.data.name, color: res.data.color }
+              }}
             />
           </div>
         </TabsContent>

@@ -6,8 +6,11 @@ import { requireRole } from "@/lib/auth-helpers"
 import { tagSchema } from "@/lib/validations/tag"
 
 export type ActionResult = { ok: true } | { ok: false; error: string }
+export type CreateTagResult =
+  | { ok: true; data: { id: string; name: string; color: string } }
+  | { ok: false; error: string }
 
-export async function createTag(formData: FormData): Promise<ActionResult> {
+export async function createTag(formData: FormData): Promise<CreateTagResult> {
   await requireRole("EDITOR")
   const parsed = tagSchema.safeParse({
     name: formData.get("name"),
@@ -16,12 +19,12 @@ export async function createTag(formData: FormData): Promise<ActionResult> {
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Inválido" }
 
   try {
-    await prisma.tag.create({ data: parsed.data })
+    const tag = await prisma.tag.create({ data: parsed.data })
+    revalidatePath("/configuracion/tags")
+    return { ok: true, data: { id: tag.id, name: tag.name, color: tag.color } }
   } catch {
     return { ok: false, error: "Etiqueta ya existe" }
   }
-  revalidatePath("/configuracion/tags")
-  return { ok: true }
 }
 
 export async function updateTag(id: string, formData: FormData): Promise<ActionResult> {
