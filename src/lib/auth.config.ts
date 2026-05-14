@@ -32,6 +32,7 @@ export const authConfig = {
       if (path.startsWith("/api/integrations/webhooks/")) return true
       if (path.startsWith("/api/v1/")) return true
       if (path.startsWith("/api/auth")) return true
+      if (path.startsWith("/api/cron/")) return true
 
       if (!isLoggedIn) return false
 

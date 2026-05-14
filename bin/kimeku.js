@@ -77,24 +77,31 @@ HOSTNAME=0.0.0.0
 function help() {
   console.log(`kimeku - AI-powered process documentation
 
-Uso:
-  npx kimeku init      Crea .env en el directorio actual con secretos generados
-  npx kimeku doctor    Diagnostica conexion a Postgres y estado
-  npx kimeku start     Aplica schema y arranca el servidor (default :3000)
-  npx kimeku help      Muestra esta ayuda
+Instalacion (una sola vez):
+  npm install -g @devitzperu/kimeku
+
+Comandos:
+  kimeku init      Crea .env en el directorio actual con secretos generados
+  kimeku doctor    Diagnostica conexion a Postgres y estado
+  kimeku start     Aplica schema y arranca el servidor (default :3000)
+  kimeku help      Muestra esta ayuda
 
 Flujo tipico:
   1) Asegurate de tener Postgres corriendo y la DB creada.
-  2) npx kimeku init
+  2) kimeku init
   3) Edita .env con tus credenciales DB_*
-  4) npx kimeku start
+  4) kimeku start
+
+Actualizar:
+  npm install -g @devitzperu/kimeku@latest
 `)
 }
 
 async function pingDatabase() {
   let Client
   try {
-    Client = require(path.join(root, "node_modules/pg")).Client
+    const resolved = require.resolve("pg", { paths: [root, __dirname] })
+    Client = require(resolved).Client
   } catch {
     try { Client = require("pg").Client } catch {}
   }
@@ -135,11 +142,33 @@ Alternativa hostada gratis:
 `)
 }
 
+function resolvePrismaBin() {
+  // intenta en orden: require.resolve (sube node_modules ancestrales),
+  // luego paths comunes (paquete instalado por npm/pnpm)
+  try {
+    return require.resolve("prisma/build/index.js", { paths: [root, __dirname] })
+  } catch {}
+  const candidates = [
+    path.join(root, "node_modules/prisma/build/index.js"),
+    path.join(root, "../prisma/build/index.js"),
+    path.join(root, "../../prisma/build/index.js"),
+    path.join(root, "../../../prisma/build/index.js"),
+  ]
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c
+  }
+  return null
+}
+
 function runPrismaPush() {
-  const prismaBin = path.join(root, "node_modules/prisma/build/index.js")
+  const prismaBin = resolvePrismaBin()
   const schemaPath = path.join(root, "prisma/schema.prisma")
-  if (!fs.existsSync(prismaBin)) {
-    console.error("No se encontro prisma. Reinstala el paquete.")
+  if (!prismaBin) {
+    console.error("No se encontro el CLI de prisma. Reinstala el paquete.")
+    return 1
+  }
+  if (!fs.existsSync(schemaPath)) {
+    console.error(`No se encontro schema.prisma en ${schemaPath}`)
     return 1
   }
   const r = spawnSync(process.execPath, [
@@ -147,6 +176,23 @@ function runPrismaPush() {
     "--skip-generate",
     "--accept-data-loss",
     "--schema", schemaPath,
+  ], { stdio: "inherit", env: process.env })
+  return r.status ?? 1
+}
+
+function ensurePrismaClient() {
+  // Si node_modules/.prisma/client no existe, correr generate.
+  // Pasa la primera vez o si postinstall fallo.
+  try {
+    const generatedPath = require.resolve(".prisma/client", { paths: [root, __dirname] })
+    if (fs.existsSync(generatedPath)) return 0
+  } catch {}
+  const prismaBin = resolvePrismaBin()
+  const schemaPath = path.join(root, "prisma/schema.prisma")
+  if (!prismaBin || !fs.existsSync(schemaPath)) return 1
+  console.log("Generando Prisma Client (primera ejecucion)...")
+  const r = spawnSync(process.execPath, [
+    prismaBin, "generate", "--schema", schemaPath,
   ], { stdio: "inherit", env: process.env })
   return r.status ?? 1
 }
@@ -163,6 +209,46 @@ function bootServer() {
   require(serverPath)
 }
 
+function startInternalScheduler() {
+  // Scheduler embebido para /api/cron/todo-alarms.
+  // Reemplaza la necesidad de configurar crontab/Vercel Cron en el SO.
+  // Desactivar con DISABLE_INTERNAL_CRON=true.
+  if (process.env.DISABLE_INTERNAL_CRON === "true") {
+    console.log("Internal cron deshabilitado (DISABLE_INTERNAL_CRON=true)")
+    return
+  }
+  if (!process.env.CRON_SECRET) {
+    console.log("Internal cron deshabilitado (CRON_SECRET ausente en .env)")
+    return
+  }
+
+  const port = process.env.PORT || "3000"
+  const url = `http://127.0.0.1:${port}/api/cron/todo-alarms`
+  const secret = process.env.CRON_SECRET
+  const intervalMs = Number(process.env.CRON_INTERVAL_MS || 60000)
+
+  async function tick() {
+    try {
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${secret}` },
+      })
+      if (!res.ok) {
+        console.error(`[cron] ${res.status} ${res.statusText}`)
+      }
+    } catch (e) {
+      console.error(`[cron] fetch fallo: ${e?.message ?? e}`)
+    }
+  }
+
+  // primera ejecucion luego de 15s para dar tiempo al server a estar listo
+  setTimeout(() => {
+    tick()
+    setInterval(tick, intervalMs)
+  }, 15000)
+
+  console.log(`Internal cron activo: ${url} cada ${intervalMs / 1000}s`)
+}
+
 ;(async () => {
   if (cmd === "help" || cmd === "--help" || cmd === "-h") {
     help()
@@ -176,13 +262,13 @@ function bootServer() {
     }
     writeEnvTemplate()
     console.log(`Creado: ${envPath}`)
-    console.log("Edita las variables DB_* y luego corre: npx kimeku start")
+    console.log("Edita las variables DB_* y luego corre: kimeku start")
     return
   }
 
   if (cmd === "doctor") {
     if (!loadEnv()) {
-      console.error("No hay .env en el directorio actual. Corre primero: npx kimeku init")
+      console.error("No hay .env en el directorio actual. Corre primero: kimeku init")
       process.exit(1)
     }
     process.env.DATABASE_URL = buildDatabaseUrl()
@@ -210,13 +296,13 @@ function bootServer() {
     console.log(`  db   = ${res.info.db}`)
     console.log(`  user = ${res.info.usr}`)
     console.log(`  ver  = ${res.info.version.split(" ").slice(0, 2).join(" ")}`)
-    console.log("Listo. Puedes correr: npx kimeku start")
+    console.log("Listo. Puedes correr: kimeku start")
     return
   }
 
   if (cmd === "start") {
     if (!loadEnv()) {
-      console.error("No hay .env. Corre primero: npx kimeku init")
+      console.error("No hay .env. Corre primero: kimeku init")
       process.exit(1)
     }
     if (!process.env.AUTH_SECRET) {
@@ -225,10 +311,35 @@ function bootServer() {
     }
     process.env.DATABASE_URL = buildDatabaseUrl()
 
+    // Auto-sync AUTH_URL con PORT si user cambio PORT pero no AUTH_URL
+    const port = process.env.PORT || "3000"
+    const defaultAuthUrl = "http://localhost:3000"
+    const rawAuth = (process.env.AUTH_URL ?? "").trim()
+    const invalidAuth = !rawAuth || rawAuth === "null" || rawAuth === "undefined"
+    if (invalidAuth || rawAuth === defaultAuthUrl) {
+      process.env.AUTH_URL = `http://localhost:${port}`
+    }
+    try {
+      const u = new URL(process.env.AUTH_URL)
+      if (u.protocol !== "http:" && u.protocol !== "https:") {
+        throw new Error(`protocolo invalido: ${u.protocol}`)
+      }
+    } catch (e) {
+      console.error(`AUTH_URL invalido: "${process.env.AUTH_URL}". Debe ser URL http(s) absoluta (ej: https://kimeku.tis.pe). ${e?.message ?? ""}`)
+      process.exit(1)
+    }
+    process.env.AUTH_TRUST_HOST = process.env.AUTH_TRUST_HOST || "true"
+
     const ping = await pingDatabase()
     if (!ping.ok) {
       printDbHelp()
       process.exit(1)
+    }
+
+    const genStatus = ensurePrismaClient()
+    if (genStatus !== 0) {
+      console.error("Fallo prisma generate")
+      process.exit(genStatus)
     }
 
     console.log("Aplicando schema (prisma db push)...")
@@ -239,6 +350,7 @@ function bootServer() {
     }
 
     console.log(`Arrancando Kimeku en http://${process.env.HOSTNAME}:${process.env.PORT}`)
+    startInternalScheduler()
     bootServer()
     return
   }

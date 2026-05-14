@@ -63,3 +63,11 @@ for (const j of junk) {
   }
 }
 console.log("cleaned standalone root junk")
+
+// Borrar .prisma/client del standalone bundle - lleva el engine de la máquina
+// donde se hizo el build (Windows). postinstall regenerará con engine del SO target.
+const standalonePrisma = resolve(standalone, "node_modules/.prisma")
+if (await exists(standalonePrisma)) {
+  await rm(standalonePrisma, { recursive: true, force: true })
+  console.log("removed bundled .prisma/client (will regenerate at install)")
+}

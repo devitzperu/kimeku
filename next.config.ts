@@ -3,14 +3,8 @@ import path from "node:path";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  serverExternalPackages: ["@prisma/client", ".prisma/client", "@prisma/engines", "bcryptjs"],
   outputFileTracingRoot: path.join(__dirname),
-  outputFileTracingIncludes: {
-    "*": [
-      "./node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client/query_engine-*",
-      "./node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client/libquery_engine-*",
-      "./node_modules/.pnpm/@prisma+client@*/node_modules/.prisma/client/schema.prisma",
-    ],
-  },
   outputFileTracingExcludes: {
     "*": [
       "node_modules/@esbuild/**",

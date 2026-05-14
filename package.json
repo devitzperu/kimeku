@@ -1,6 +1,6 @@
 {
   "name": "@devitzperu/kimeku",
-  "version": "0.1.0-rc.1",
+  "version": "0.1.0",
   "publishConfig": {
     "access": "public"
   },
@@ -32,7 +32,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build --turbopack",
-    "build:dist": "next build --turbopack && node scripts/copy-standalone.mjs",
+    "build:dist": "next build --webpack && node scripts/copy-standalone.mjs",
     "start": "next start",
     "lint": "eslint",
     "db:generate": "node scripts/with-db.mjs prisma generate",
@@ -42,7 +42,7 @@
     "db:seed": "node scripts/with-db.mjs tsx prisma/seed.ts",
     "db:reset": "node scripts/with-db.mjs prisma migrate reset",
     "db:search-init": "node scripts/with-db.mjs node scripts/enable-search.mjs",
-    "postinstall": "prisma generate",
+    "postinstall": "node bin/postinstall.js",
     "prepublishOnly": "node scripts/copy-standalone.mjs"
   },
   "prisma": {
